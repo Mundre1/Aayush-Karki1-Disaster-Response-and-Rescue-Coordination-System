@@ -1,0 +1,235 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  roleId    Int    @id @default(autoincrement()) @map("role_id")
+  roleName  String @unique @map("role_name")
+  users     User[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+model User {
+  userId    Int       @id @default(autoincrement()) @map("user_id")
+  name      String
+  email     String    @unique
+  password  String
+  phone     String?
+  roleId    Int       @map("role_id")
+  role      Role      @relation(fields: [roleId], references: [roleId])
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  incidents         Incident[]
+  comments          Comment[]
+  incidentUpdates   IncidentUpdate[]
+  volunteer         Volunteer?
+  notifications     Notification[]
+  missions          Mission[]
+  organizationId    Int?      @map("rescue_team_id")
+  organization      Organization? @relation(fields: [organizationId], references: [organizationId])
+  responderStatus   String    @default("approved") @map("responder_status")
+  donations         Donation[]
+  missionRequestsVolunteer VolunteerMissionRequest[] @relation("MissionRequestVolunteer")
+  missionRequestsResolved  VolunteerMissionRequest[] @relation("MissionRequestResolver")
+  campaigns         Campaign[]
+
+  @@map("users")
+}
+
+model Location {
+  locationId Int      @id @default(autoincrement()) @map("location_id")
+  latitude   Float
+  longitude  Float
+  address    String?
+  district   String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  incidents Incident[]
+
+  @@map("locations")
+}
+
+model Incident {
+  incidentId  Int      @id @default(autoincrement()) @map("incident_id")
+  userId      Int      @map("user_id")
+  user        User     @relation(fields: [userId], references: [userId])
+  locationId  Int      @map("location_id")
+  location    Location @relation(fields: [locationId], references: [locationId])
+  title       String
+  description String   @db.Text
+  severity    String   // e.g., "low", "medium", "high", "critical"
+  imageUrl    String?  @map("image_url")
+  status      String   @default("pending") // e.g., "pending", "assigned", "in_progress", "resolved", "closed"
+  reportedAt  DateTime @default(now()) @map("reported_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  incidentUpdates IncidentUpdate[]
+  comments        Comment[]
+  missions        Mission[]
+  notifications   Notification[]
+
+  @@map("incidents")
+}
+
+model IncidentUpdate {
+  updateId   Int      @id @default(autoincrement()) @map("update_id")
+  incidentId Int      @map("incident_id")
+  incident   Incident @relation(fields: [incidentId], references: [incidentId])
+  userId     Int      @map("user_id")
+  user       User     @relation(fields: [userId], references: [userId])
+  status     String
+  note       String?  @db.Text
+  imageUrl   String?  @map("image_url")
+  updatedAt  DateTime @default(now()) @map("updated_at")
+
+  @@map("incident_updates")
+}
+
+model Organization {
+  organizationId Int       @id @default(autoincrement()) @map("team_id")
+  organizationName String    @unique @map("team_name")
+  specialization String?
+  contact      String?
+  isActive     Boolean   @default(true) @map("is_active")
+  approvalStatus String  @default("approved") @map("approval_status")
+  requestedByUserId Int? @map("requested_by_user_id")
+  reviewedByUserId  Int? @map("reviewed_by_user_id")
+  reviewedAt   DateTime? @map("reviewed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  missions Mission[]
+  members  User[]
+
+  @@map("rescue_teams")
+}
+
+model Mission {
+  missionId     Int         @id @default(autoincrement()) @map("mission_id")
+  incidentId    Int         @map("incident_id")
+  incident      Incident    @relation(fields: [incidentId], references: [incidentId])
+  organizationId  Int?        @map("rescue_team_id")
+  organization    Organization? @relation(fields: [organizationId], references: [organizationId])
+  userId        Int?        @map("user_id")
+  user          User?       @relation(fields: [userId], references: [userId])
+  missionStatus String      @default("assigned") @map("mission_status") // e.g., "assigned", "in_progress", "completed", "cancelled"
+  assignedAt    DateTime    @default(now()) @map("assigned_at")
+  completedAt   DateTime?   @map("completed_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  volunteerRequests VolunteerMissionRequest[]
+
+  @@map("missions")
+}
+
+model VolunteerMissionRequest {
+  requestId        Int       @id @default(autoincrement()) @map("request_id")
+  missionId        Int       @map("mission_id")
+  mission          Mission   @relation(fields: [missionId], references: [missionId], onDelete: Cascade)
+  volunteerUserId  Int       @map("volunteer_user_id")
+  volunteer        User      @relation("MissionRequestVolunteer", fields: [volunteerUserId], references: [userId], onDelete: Cascade)
+  status           String    @default("pending")
+  resolvedAt       DateTime? @map("resolved_at")
+  resolvedByUserId Int?      @map("resolved_by_user_id")
+  resolver         User?     @relation("MissionRequestResolver", fields: [resolvedByUserId], references: [userId])
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@unique([missionId, volunteerUserId])
+  @@map("volunteer_mission_requests")
+}
+
+model Volunteer {
+  volunteerId  Int      @id @default(autoincrement()) @map("volunteer_id")
+  userId       Int      @unique @map("user_id")
+  user         User     @relation(fields: [userId], references: [userId])
+  skills       String?  @db.Text
+  availability String?  // e.g., "available", "busy", "unavailable"
+  isApproved   Boolean  @default(false) @map("is_approved")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("volunteers")
+}
+
+model Notification {
+  notificationId Int      @id @default(autoincrement()) @map("notification_id")
+  userId         Int      @map("user_id")
+  user           User     @relation(fields: [userId], references: [userId])
+  incidentId     Int?     @map("incident_id")
+  incident       Incident? @relation(fields: [incidentId], references: [incidentId])
+  type           String   // e.g., "incident_reported", "mission_assigned", "status_update"
+  message        String   @db.Text
+  isRead         Boolean  @default(false) @map("is_read")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+model Comment {
+  commentId   Int      @id @default(autoincrement()) @map("comment_id")
+  content     String   @db.Text
+  incidentId  Int      @map("incident_id")
+  incident    Incident @relation(fields: [incidentId], references: [incidentId])
+  userId      Int      @map("user_id")
+  user        User     @relation(fields: [userId], references: [userId])
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("comments")
+}
+
+model Campaign {
+  campaignId    Int      @id @default(autoincrement()) @map("campaign_id")
+  creatorId     Int      @map("creator_id")
+  creator       User     @relation(fields: [creatorId], references: [userId])
+  title         String
+  description   String   @db.Text
+  targetAmount  Decimal  @db.Decimal(10, 2) @map("target_amount")
+  raisedAmount  Decimal  @default(0) @db.Decimal(10, 2) @map("raised_amount")
+  imageUrl      String?  @map("image_url")
+  status        String   @default("pending") // e.g., "pending", "approved", "rejected", "completed"
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  donations     Donation[]
+
+  @@map("campaigns")
+}
+
+model Donation {
+  donationId    Int      @id @default(autoincrement()) @map("donation_id")
+  userId        Int?     @map("user_id")
+  user          User?    @relation(fields: [userId], references: [userId])
+  campaignId    Int?     @map("campaign_id")
+  campaign      Campaign? @relation(fields: [campaignId], references: [campaignId])
+  donorName     String?  @map("donor_name")
+  donorEmail    String?  @map("donor_email")
+  amount        Decimal  @db.Decimal(10, 2)
+  paymentMethod String?  @map("payment_method")
+  transactionId String?  @unique @map("transaction_id")
+  bankReference String?  @map("bank_reference")
+  receiptUrl    String?  @map("receipt_url")
+  status        String   @default("pending")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("donations")
+}
+
